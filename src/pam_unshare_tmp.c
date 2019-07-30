@@ -221,7 +221,7 @@ static inline int make_tmpfs_volume(const char *root,const char *name,const user
 	const unsigned long mountflags = MS_NODIRATIME|MS_NOATIME|MS_NODEV|MS_NOSUID|MS_NOEXEC ;//params->mountflags;
 	const mode_t dirmode = params->dirmode;
 	DEBUG_VAR(size,"%zu");
-	DEBUG_VAR(mountflags,"0x%X");
+	DEBUG_VAR(mountflags,"0x%luX");
 	DEBUG_VAR(dirmode,"0%o");
 	if (likely(chdir(root) == 0 )) {
 		if (unlikely(mkdir(name,dirmode) != 0)) {
@@ -266,6 +266,44 @@ static inline int umount_tmpfs_volume(pam_handle_t *pamh,const char *root,const 
 	return error;
 }
 
+static int set_user_var_tmp(pam_handle_t *pamh,const uid_t uid, const gid_t gid) {
+	int error = EXIT_SUCCESS;
+#define VAR_TMP_USER_PATH "/var/.tmp_%u"
+	size_t length = 5 + strlen(VAR_TMP_USER_PATH) + 1;
+	char *var_tmp_user_path = (char *)alloca(length);
+	const size_t n = (size_t)sprintf(var_tmp_user_path,VAR_TMP_USER_PATH,uid);
+	ASSERT(n < length);
+	// create user's /var/tmp directory (if needed)
+	const mode_t mode = S_IRWXU;
+	if (unlikely(mkdir(var_tmp_user_path,mode) == 0)) {
+		if (unlikely(chown(var_tmp_user_path, uid, gid) != 0)) {
+			error = errno;
+			ERROR_MSG("mkdir %s error %d (%m)",var_tmp_user_path,error);
+		}
+	} else {
+		error = errno;
+		DEBUG_VAR(error,"%d");
+		if (likely(EEXIST == error)) {
+			error = EXIT_SUCCESS;
+		} else {
+			ERROR_MSG("mkdir %s error %d (%m)",var_tmp_user_path,error);
+		}
+	}
+
+	// then mount user's /var/tmp to /var/tmp
+	if (likely(EXIT_SUCCESS == error)) {
+		if (unlikely(mount(var_tmp_user_path,"/var/tmp",NULL,MS_BIND,NULL) != 0)) {
+			error = errno;
+			ERROR_MSG("mount %s -> /var/tmp error %d (%m)",var_tmp_user_path,error);
+		} else {
+			DEBUG_MSG("mount %s -> /var/tmp done",var_tmp_user_path);
+		}
+	}
+#undef VAR_TMP_USER_PATH
+	DEBUG_VAR(error,"%d");
+	return error;
+}
+
 static int move_to_user_namespace(pam_handle_t *pamh,const char *username,const char *configfile) {
 	int error = EXIT_SUCCESS;
 	errno = EXIT_SUCCESS;
@@ -289,8 +327,11 @@ static int move_to_user_namespace(pam_handle_t *pamh,const char *username,const 
 					error = make_tmpfs_volume("/","tmp",&params);
 					if (likely(EXIT_SUCCESS == error)) {
 						bool last_session = false;
-						error = manage_sessions_number(pamh,uid, true, &last_session);
+						manage_sessions_number(pamh,uid, true, &last_session); // error already printed
 					}
+
+					error = set_user_var_tmp(pamh,uid,entry->pw_gid);
+
 				} else {
 					error = errno;
 					ERROR_MSG("mount / MS_REC | MS_PRIVATE error %d",error);

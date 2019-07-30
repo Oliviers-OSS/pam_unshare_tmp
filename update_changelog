@@ -1,0 +1,31 @@
+#!/bin/bash
+
+if [ "x-x" = "x$1" ] ; then
+	set -x
+	shift
+fi
+
+logfile=ChangeLog.md
+old_logfile=$logfile.old
+previous_tag=0
+
+if [ -f $logfile ] ; then
+	/bin/mv $logfile $old_logfile
+fi
+
+for current_tag in $(git tag --sort=-creatordate)
+do
+
+	if [ "$previous_tag" != 0 ];then
+    		tag_date=$(git log -1 --pretty=format:'%ad' --date=short ${previous_tag})
+    		printf "## ${previous_tag} (${tag_date})\n\n" >>$logfile
+    		git log ${current_tag}...${previous_tag} --pretty=format:'*  %s ' --reverse | grep -v Merge >>$logfile
+    		printf "\n\n" >>logfile
+	fi
+	previous_tag=${current_tag}
+done
+
+if [ -f $old_logfile ] ; then
+	cat $old_logfile >>$logfile
+	/bin/rm $old_logfile 
+fi

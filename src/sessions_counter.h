@@ -69,7 +69,8 @@ static int manage_sessions_number(pam_handle_t *pamh,const uid_t uid, const bool
 #define RUN_USER_PATH "/run/user/%u/.pam_unshared_session_counter"
 	size_t length = 5 + strlen(RUN_USER_PATH) + 1;
 	char *run_user_path = (char *)alloca(length);
-	sprintf(run_user_path,RUN_USER_PATH,uid);
+	const size_t n = (size_t)sprintf(run_user_path,RUN_USER_PATH,uid);
+	ASSERT(n < length);
 	int fd = open(run_user_path,O_RDWR|O_CREAT,S_IRUSR|S_IWUSR);
 	if (likely((fd != -1))) {
 		if (likely(flock(fd,LOCK_EX) == 0)) {
@@ -132,6 +133,7 @@ static int manage_sessions_number(pam_handle_t *pamh,const uid_t uid, const bool
 		error = errno;
 		ERROR_MSG("open %s O_RDWR error %d (%m)",run_user_path,error);
 	}
+#undef RUN_USER_PATH
 	return error;
 }
 
