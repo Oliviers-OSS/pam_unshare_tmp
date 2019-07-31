@@ -15,7 +15,6 @@
 
 #include "parameters.h"
 #include "debug.h"
-#include "sessions_counter.h"
 
 #include <sys/stat.h>
 #include <sys/mount.h>
@@ -32,6 +31,11 @@
 #include <string.h>
 #include <alloca.h>
 #include <limits.h>
+#include <utmpx.h>
+
+typedef enum bool_ {
+	false,true
+} bool;
 
 #define OBTAIN(item, value, default_value)  do {                \
 		(void) pam_get_item(pamh, item, &value);                   \
@@ -324,11 +328,7 @@ static int move_to_user_namespace(pam_handle_t *pamh,const char *username,const 
 				// create a new private mount namespace
 				if (likely(mount("none", "/", NULL, MS_REC | MS_PRIVATE, NULL) == 0)) {
 					// set its /tmp directory
-					error = make_tmpfs_volume("/","tmp",&params);
-					if (likely(EXIT_SUCCESS == error)) {
-						bool last_session = false;
-						manage_sessions_number(pamh,uid, true, &last_session); // error already printed
-					}
+					make_tmpfs_volume("/","tmp",&params); // error already printed, try to go on
 
 					error = set_user_var_tmp(pamh,uid,entry->pw_gid);
 
@@ -390,16 +390,20 @@ PAM_EXTERN int pam_sm_close_session(pam_handle_t *pamh, int flags , int argc , c
 #ifndef _ROOT_USER_ENABLED_
 		if (likely(strcmp(username,"root") != 0)) {
 #endif // _ROOT_USER_ENABLED_
-			struct passwd *entry = getpwnam(username);
-			if (likely(entry)) {
-				bool last_session = false;
-				error = manage_sessions_number(pamh,entry->pw_uid, false, &last_session);
-				if (unlikely(last_session)) {
-					error = umount_tmpfs_volume(pamh,"/","/tmp",MNT_DETACH | UMOUNT_NOFOLLOW);
+			struct utmpx *entry = NULL;
+			register unsigned int nb_remaining = 0;
+
+			utmpxname(UTMPX_FILE);
+			setutxent();
+			while((entry = getutxent())) {
+				if ((USER_PROCESS == entry->ut_type) && (strcmp(entry->ut_user,username) == 0)) {
+					++nb_remaining;
 				}
-			} else {
-				error = errno;
-				ERROR_MSG("getpwnam %s error %d (%m)",username,error);
+			}
+			endutxent();
+			DEBUG_VAR(nb_remaining,"%u");
+			if (unlikely(0 == nb_remaining)) {
+				error = umount_tmpfs_volume(pamh,"/","/tmp",MNT_DETACH | UMOUNT_NOFOLLOW);
 			}
 #ifndef _ROOT_USER_ENABLED_
 		} else {

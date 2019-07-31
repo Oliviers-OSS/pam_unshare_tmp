@@ -1,1 +1,1 @@
-Add mandatory locking management (remount /run/user MS_MANDLOCK +  chmod g+s,g-x on session counts files) or find a better method to count the number of session of users  
+  
