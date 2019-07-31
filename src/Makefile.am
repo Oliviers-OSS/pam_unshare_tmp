@@ -11,7 +11,7 @@ libsecurity_LTLIBRARIES = pam_unshare_tmp.la
 # Build information for each library
 
 # Sources for pam_unshare_tmp
-noinst_HEADERS = debug.h ModuleVersionInfo.h parameters.h ini.h sessions_counter.h
+noinst_HEADERS = debug.h ModuleVersionInfo.h parameters.h ini.h
 pam_unshare_tmp_la_SOURCES = pam_unshare_tmp.c
 pam_unshare_tmp_la_SOURCES += parameters.c ini.c  
 pam_unshare_tmp_la_SOURCES += $(noinst_HEADERS) pam_unshare_tmp.map

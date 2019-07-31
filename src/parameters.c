@@ -57,7 +57,7 @@ static inline size_t size_parser(const char *value) {
 	MO(NOSUID) \
 	MO(PRIVATE)
 
-static inline int mount_options_parser(pam_handle_t *pamh,const char *options, unsigned long *mountflags) {
+static int mount_options_parser(pam_handle_t *pamh,const char *options, unsigned long *mountflags) {
 	int error = EXIT_SUCCESS;
 	char *str = (char *)alloca(strlen(options)+1);
 	strcpy(str,options);
