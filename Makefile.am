@@ -14,3 +14,7 @@ cppcheck:
 count:
 	sloccount $(top_srcdir)/src 
 	
+update-changelog:
+	$(top_srcdir)/update_changelog 
+
+	
