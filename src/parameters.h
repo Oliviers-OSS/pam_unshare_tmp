@@ -28,6 +28,7 @@
 typedef struct userParameters_ {
 	pam_handle_t *pamh;
 	const char *username;
+	const char *groupname;
 	size_t size;
 	unsigned long mountflags;
 	mode_t dirmode;

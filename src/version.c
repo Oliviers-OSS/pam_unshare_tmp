@@ -15,7 +15,7 @@
 MODULE_NAME_AUTOTOOLS;
 MODULE_AUTHOR_AUTOTOOLS;
 MODULE_VERSION_AUTOTOOLS;
-MODULE_FILE_VERSION(0.0.0.2);
+MODULE_FILE_VERSION(0.0.0.3);
 MODULE_DESCRIPTION(PAM module to set a private /tmp per users using Linux namespaces);
 MODULE_QUOTED_COMMENT("Default parameters can now be set in the configuration file");
 MODULE_COPYRIGHT(GPL);

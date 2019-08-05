@@ -84,55 +84,54 @@ static int mount_options_parser(pam_handle_t *pamh,const char *options, unsigned
 #undef MOUNT_OPTIONS_TABLE
 #undef MO
 
+static inline int configfile_read_parameter(const char* section, const char* name,const char* value,userParameters *params) {
+	int error = EXIT_SUCCESS;
+	pam_handle_t *pamh = params->pamh;
+	if ((strcmp(name, "size") == 0)) {
+		const size_t size = size_parser(value);
+		if (likely(size)) {
+			params->size = size;
+			DEBUG_VAR(params->size,"%zu");
+		} else {
+			WARNING_MSG("Invalid size parameter %s for user %s",value,section);
+		}
+	} else if (strcmp(name, "options") == 0) {
+		unsigned long mountflags = 0;
+		error = mount_options_parser(pamh,value,&mountflags);
+		if (EXIT_SUCCESS == error) {
+			params->mountflags = mountflags;
+			DEBUG_VAR(params->mountflags,"0x%X");
+		} else {
+			WARNING_MSG("Invalid mount options parameter %s for user %s",value,section);
+			error = EXIT_SUCCESS;
+		}
+	} else if (strcmp(name, "dirmode") == 0) {
+		params->dirmode = (mode_t)strtoul(value,NULL,0);
+		DEBUG_VAR(params->dirmode,"0%o");
+	} else {
+		WARNING_MSG("Unknown parameter %s = %s in section %s",name,value,section);
+	}
+	return error;
+}
+
 static int configfile_line_handler(void* user, const char* section, const char* name,const char* value) {
 	userParameters *params = (userParameters*)user;
 	pam_handle_t *pamh = params->pamh;
 	int error = EXIT_SUCCESS;
 
 	if (strcmp(section, params->username) == 0) {
-		if ((strcmp(name, "size") == 0)) {
-			const size_t size = size_parser(value);
-			if (likely(size)) {
-				params->size = size;
-			} else {
-				WARNING_MSG("Invalid size parameter %s for user %s",value,section);
-			}
-		} else if (strcmp(name, "options") == 0) {
-			unsigned long mountflags = 0;
-			error = mount_options_parser(pamh,value,&mountflags);
-			if (EXIT_SUCCESS == error) {
-				params->mountflags = mountflags;
-			} else {
-				WARNING_MSG("Invalid mount options parameter %s for user %s",value,section);
-			}
-		} else if (strcmp(name, "dirmode") == 0) {
-			params->dirmode = (mode_t)strtoul(value,NULL,0);
-		} else {
-			WARNING_MSG("Unknown parameter %s = %s in section %s",name,value,section);
-		}
+		error = configfile_read_parameter(section,name,value,params);
 	} else if ('\0' == section[0]) {
-		if ((strcmp(name, "size") == 0)) {
-			const size_t size = size_parser(value);
-			if (likely(size)) {
-				params->size = size;
-				DEBUG_VAR(params->size,"%zu");
-			} else {
-				WARNING_MSG("Invalid default size parameter %s",value);
+		error = configfile_read_parameter("(default)",name,value,params);
+	} else if (strncmp("group",section,strlen("group")) == 0) {
+		DEBUG_MARK;
+		const char *groupname = strchr(section,'=');
+		if (likely(groupname)) {
+			groupname++;
+			DEBUG_VAR(groupname,"%s");
+			if (strcmp(groupname,params->groupname) == 0) {
+				error = configfile_read_parameter(section,name,value,params);
 			}
-		} else if (strcmp(name, "options") == 0) {
-			unsigned long mountflags = 0;
-			error = mount_options_parser(pamh,value,&mountflags);
-			if (EXIT_SUCCESS == error) {
-				params->mountflags = mountflags;
-				DEBUG_VAR(params->mountflags,"0x%X");
-			} else {
-				WARNING_MSG("Invalid default mount options parameter %s",value);
-			}
-		} else if (strcmp(name, "dirmode") == 0) {
-			params->dirmode = (mode_t)strtoul(value,NULL,0);
-			DEBUG_VAR(params->dirmode,"0%o");
-		} else {
-			WARNING_MSG("Unknown default parameter %s = %s",name,value);
 		}
 	}
 

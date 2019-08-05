@@ -1,2 +1,1 @@
-Default parameters can now be set in the configuration file
-BUGFIX: dirmode parameter was not set and was overwritting the mountflags
+Configuration file allows to set users'configuration parameters using their primary group

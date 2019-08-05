@@ -19,6 +19,7 @@
 #include <sys/stat.h>
 #include <sys/mount.h>
 #include <sys/file.h>
+#include <sys/types.h>
 #include <errno.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -27,9 +28,11 @@
 #include <ctype.h>
 #include <fcntl.h>
 #include <pwd.h>
+#include <grp.h>
 #include <sched.h>
 #include <string.h>
 #include <alloca.h>
+#include <malloc.h>
 #include <limits.h>
 #include <utmpx.h>
 
@@ -225,7 +228,7 @@ static inline int make_tmpfs_volume(const char *root,const char *name,const user
 	const unsigned long mountflags = params->mountflags;
 	const mode_t dirmode = params->dirmode;
 	DEBUG_VAR(size,"%zu");
-	DEBUG_VAR(mountflags,"0x%luX");
+	DEBUG_VAR(mountflags,"0x%lX");
 	DEBUG_VAR(dirmode,"0%o");
 	if (likely(chdir(root) == 0 )) {
 		if (unlikely(mkdir(name,dirmode) != 0)) {
@@ -309,41 +312,89 @@ static int set_user_var_tmp(pam_handle_t *pamh,const uid_t uid, const gid_t gid)
 
 static int move_to_user_namespace(pam_handle_t *pamh,const char *username,const char *configfile) {
 	int error = EXIT_SUCCESS;
-	errno = EXIT_SUCCESS;
-	struct passwd *entry = getpwnam(username);
-	if (likely(entry)) {
-		const pid_t pid = getpid();
-		DEBUG_VAR(pid,"current %u");
-		// try to find already mounted volume for this user
-		const uid_t uid = entry->pw_uid;
-		error = move_to_uid_namespace(pamh,uid);
-		if (unlikely(ENOENT == error)) {
-			INFO_MSG("Not running process found for this user: creating its running namespaces...");
-			// get user's parameters
-			userParameters params = {pamh,username,DEFAULT_SIZE,DEFAULT_MOUNT_OPTIONS,DEFAULT_DIR_MODE};
-			get_user_parameters(configfile,&params);
 
-			if (unshare(CLONE_NEWNS) == 0) { // New FS / mount namespace
-				// create a new private mount namespace
-				if (likely(mount("none", "/", NULL, MS_REC | MS_PRIVATE, NULL) == 0)) {
-					// set its /tmp directory
-					make_tmpfs_volume("/","tmp",&params); // error already printed, try to go on
-
-					error = set_user_var_tmp(pamh,uid,entry->pw_gid);
-
-				} else {
-					error = errno;
-					ERROR_MSG("mount / MS_REC | MS_PRIVATE error %d",error);
-				}
-			} else {
-				error = errno;
-				CRIT_MSG("unshare CLONE_NEWNS error %d (%m)",error);
-			}
-		} // error (if any) already printed
+	long int n = sysconf(_SC_GETPW_R_SIZE_MAX);
+	size_t pwd_buffer_size = 16384;
+	if (likely(n != -1)) {
+		pwd_buffer_size = (size_t)n;
 	} else {
-		error = errno;
-		ERROR_MSG("getpwnam %s error %d (%m)",username,error);
+		INFO_MSG("sysconf _SC_GETPW_R_SIZE_MAX error");
 	}
+	DEBUG_VAR(pwd_buffer_size,"%zu");
+
+	char *pwd_buffer = (char *)malloc((size_t)pwd_buffer_size);
+	if (likely(pwd_buffer)) {
+		struct passwd entry,*result = NULL;
+		error = getpwnam_r(username,&entry,pwd_buffer,pwd_buffer_size,&result);
+		if (likely(result)) {
+			//const pid_t pid = getpid();
+			//DEBUG_VAR(pid,"current %u");
+			// try to find already mounted volume for this user
+			const uid_t uid = entry.pw_uid;
+			error = move_to_uid_namespace(pamh,uid);
+			if (unlikely(ENOENT == error)) {
+				INFO_MSG("Not running process found for this user: creating its running namespaces...");
+
+				n = sysconf(_SC_GETGR_R_SIZE_MAX);
+				size_t grp_buffer_size = 2048;
+				if (likely(n != -1)) {
+					grp_buffer_size = (size_t)n;
+				}
+				DEBUG_VAR(grp_buffer_size,"%zu");
+
+				char *grp_buffer = (char *)malloc((size_t)grp_buffer_size);
+				if (likely(grp_buffer)) {
+					struct group grp, *grp_result = NULL;
+					error = getgrgid_r(entry.pw_gid,&grp,grp_buffer,grp_buffer_size,&grp_result);
+					if (likely(grp_result)) {
+						// get user's parameters
+						userParameters params = {pamh,username,grp.gr_name,DEFAULT_SIZE,DEFAULT_MOUNT_OPTIONS,DEFAULT_DIR_MODE};
+						get_user_parameters(configfile,&params);
+
+						if (unshare(CLONE_NEWNS) == 0) { // New FS / mount namespace
+							// create a new private mount namespace
+							if (likely(mount("none", "/", NULL, MS_REC | MS_PRIVATE, NULL) == 0)) {
+								// set its /tmp directory
+								make_tmpfs_volume("/","tmp",&params); // error already printed, try to go on
+
+								error = set_user_var_tmp(pamh,uid,entry.pw_gid);
+
+							} else {
+								error = errno;
+								ERROR_MSG("mount / MS_REC | MS_PRIVATE error %d",error);
+							}
+						} else {
+							error = errno;
+							CRIT_MSG("unshare CLONE_NEWNS error %d (%m)",error);
+						}
+					} else {
+						if (likely(EXIT_SUCCESS == error)) {
+							error = ENOENT;
+						}
+						errno = error;
+						ERROR_MSG("getgrgid_r %u error %d (%m)",entry.pw_gid,error);
+					}
+					free(grp_buffer);
+					grp_buffer = NULL;
+				} else {
+					error = ENOMEM;
+					ERROR_MSG("Failed to allocate %zu bytes for group strings",grp_buffer_size);
+				}
+			} // error (if any) already printed
+		} else {
+			if (likely(EXIT_SUCCESS == error)) {
+				error = ENOENT;
+			}
+			errno = error;
+			ERROR_MSG("getpwnam %s error %d (%m)",username,error);
+		}
+		free(pwd_buffer);
+		pwd_buffer = NULL;
+	} else {
+		error = ENOMEM;
+		ERROR_MSG("Failed to allocate %zu bytes for passwd strings",pwd_buffer_size);
+	}
+
 	DEBUG_VAR(error,"%d");
 	return error;
 }
