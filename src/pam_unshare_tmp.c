@@ -222,7 +222,7 @@ static inline int make_tmpfs_volume(const char *root,const char *name,const user
 	int error = EXIT_SUCCESS;
 	const pam_handle_t *pamh = params->pamh;
 	const size_t size = params->size;
-	const unsigned long mountflags = MS_NODIRATIME|MS_NOATIME|MS_NODEV|MS_NOSUID|MS_NOEXEC ;//params->mountflags;
+	const unsigned long mountflags = params->mountflags;
 	const mode_t dirmode = params->dirmode;
 	DEBUG_VAR(size,"%zu");
 	DEBUG_VAR(mountflags,"0x%luX");
@@ -286,7 +286,6 @@ static int set_user_var_tmp(pam_handle_t *pamh,const uid_t uid, const gid_t gid)
 		}
 	} else {
 		error = errno;
-		DEBUG_VAR(error,"%d");
 		if (likely(EEXIST == error)) {
 			error = EXIT_SUCCESS;
 		} else {
