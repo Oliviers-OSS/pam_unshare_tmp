@@ -1,6 +1,6 @@
 dnl Process this file with autoconf to produce a configure script.
 AC_PREREQ(2.59)
-AC_INIT(pam-unshare-tmp, 1.0.2.0,Oliviers.Open.Source.Softwares@gmail.com,pam-unshare-tmp,https://github.com/Oliviers-OSS/pam_unshare_tmp.git)
+AC_INIT(pam-unshare-tmp, 1.0.2.1,Oliviers.Open.Source.Softwares@gmail.com,pam-unshare-tmp,https://github.com/Oliviers-OSS/pam_unshare_tmp.git)
 LIB_PAM_VERSION=0
 LIB_PAM_REVISON=1
 LIB_PAM_INTERFACE_AGE=0

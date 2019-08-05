@@ -1,1 +1,2 @@
-Use utmpx API to unmount the user's tmp directory
+Default parameters can now be set in the configuration file
+BUGFIX: dirmode parameter was not set and was overwritting the mountflags
