@@ -57,7 +57,7 @@ static inline size_t size_parser(const char *value) {
 	MO(NOSUID) \
 	MO(PRIVATE)
 
-static int mount_options_parser(pam_handle_t *pamh,const char *options, unsigned long *mountflags) {
+static inline int mount_options_parser(pam_handle_t *pamh,const char *options, unsigned long *mountflags) {
 	int error = EXIT_SUCCESS;
 	char *str = (char *)alloca(strlen(options)+1);
 	strcpy(str,options);
@@ -108,6 +108,9 @@ static inline int configfile_read_parameter(const char* section, const char* nam
 	} else if (strcmp(name, "dirmode") == 0) {
 		params->dirmode = (mode_t)strtoul(value,NULL,0);
 		DEBUG_VAR(params->dirmode,"0%o");
+	} else if (strcmp(name, "unshare_ipc") == 0) {
+		params->unshare_ipc = ((value[0] != 'n') && (value[0] != 'N') && (value[0] != '0'))?true:false;
+		DEBUG_VAR_BOOL(params->unshare_ipc);
 	} else {
 		WARNING_MSG("Unknown parameter %s = %s in section %s",name,value,section);
 	}
@@ -125,7 +128,7 @@ static int configfile_line_handler(void* user, const char* section, const char* 
 		error = configfile_read_parameter("(default)",name,value,params);
 	} else if (strncmp("group",section,strlen("group")) == 0) {
 		DEBUG_MARK;
-		const char *groupname = strchr(section,'=');
+		register const char *groupname = strchr(section,'=');
 		if (likely(groupname)) {
 			groupname++;
 			DEBUG_VAR(groupname,"%s");

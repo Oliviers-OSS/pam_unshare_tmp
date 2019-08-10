@@ -1,4 +1,7 @@
-## v1.0.2.2 (2019-08-05) 
+## v1.0.3.0 (2019-08-10)
+* IPC name space can now be unshared between users (new key name unshare_ipc, boolean value in the configuration file)
+
+## v1.0.2.2 (2019-08-05) [View](https://github.com/Oliviers-OSS/pam_unshare_tmp/commit/792e9ecabeb9cc6c1a087cb685f86638cba90fd2)
 * Configuration file allows to set users'configuration parameters using their primary group
 
 ## v1.0.2.1 (2019-08-05) [View](https://github.com/Oliviers-OSS/pam_unshare_tmp/commit/63df7eeb56a4231d1c1671924a9ba943034717c8) 

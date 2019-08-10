@@ -1,1 +1,1 @@
-Configuration file allows to set users'configuration parameters using their primary group
+Allow to un-share the IPC name space too (key name unshare_ipc, boolean value)  

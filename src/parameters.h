@@ -25,6 +25,10 @@
 #include <security/pam_ext.h>
 #include <sys/types.h>
 
+typedef enum bool_ {
+	false,true
+} bool;
+
 typedef struct userParameters_ {
 	pam_handle_t *pamh;
 	const char *username;
@@ -32,6 +36,7 @@ typedef struct userParameters_ {
 	size_t size;
 	unsigned long mountflags;
 	mode_t dirmode;
+	bool unshare_ipc;
 } userParameters;
 
 

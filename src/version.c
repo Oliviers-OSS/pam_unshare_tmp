@@ -15,9 +15,9 @@
 MODULE_NAME_AUTOTOOLS;
 MODULE_AUTHOR_AUTOTOOLS;
 MODULE_VERSION_AUTOTOOLS;
-MODULE_FILE_VERSION(0.0.0.3);
-MODULE_DESCRIPTION(PAM module to set a private /tmp per users using Linux namespaces);
-MODULE_QUOTED_COMMENT("Default parameters can now be set in the configuration file");
+MODULE_FILE_VERSION(0.0.0.4);
+MODULE_DESCRIPTION(PAM module to set a private /tmp and /var/tmp tmpfs volumes per users using Linux namespaces);
+MODULE_QUOTED_COMMENT("New parameter option to unshare ipc (key name unshare_ipc, boolean value)");
 MODULE_COPYRIGHT(GPL);
 MODULE_SCM_LABEL_AUTOTOOLS;
 MODULE_LOGGER;
@@ -48,7 +48,6 @@ void displayVersionInfo(void)
 	DISPLAY("File version:",__module_file_modinfo);
 	DISPLAY("CSC Version:",__module_modinfo);
 	DISPLAY("Description:",__module_description);
-	//printf("\n");
 	DISPLAY("(C) Copyright:",__module_copyright);
 	_exit(EXIT_SUCCESS);
 }

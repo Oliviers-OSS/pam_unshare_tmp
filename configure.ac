@@ -1,6 +1,6 @@
 dnl Process this file with autoconf to produce a configure script.
 AC_PREREQ(2.59)
-AC_INIT(pam-unshare-tmp, 1.0.2.2,Oliviers.Open.Source.Softwares@gmail.com,pam-unshare-tmp,https://github.com/Oliviers-OSS/pam_unshare_tmp.git)
+AC_INIT(pam-unshare-tmp, 1.0.3.0,Oliviers.Open.Source.Softwares@gmail.com,pam-unshare-tmp,https://github.com/Oliviers-OSS/pam_unshare_tmp.git)
 LIB_PAM_VERSION=0
 LIB_PAM_REVISON=1
 LIB_PAM_INTERFACE_AGE=0
@@ -30,7 +30,7 @@ AC_PROG_RANLIB
 
 # Checks for header files.
 AC_CHECK_HEADER_STDBOOL
-AC_CHECK_HEADERS([fcntl.h stddef.h sys/time.h syslog.h limits.h sys/mount.h sys/file.h security/pam_appl.h utmpx.h]) 
+AC_CHECK_HEADERS([fcntl.h stddef.h sys/time.h syslog.h limits.h sys/mount.h sys/file.h security/pam_appl.h utmpx.h malloc.h]) 
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_TYPE_MODE_T
@@ -46,6 +46,7 @@ AC_FUNC_MALLOC
 AC_FUNC_REALLOC
 AC_FUNC_ALLOCA
 AC_FUNC_LSTAT_FOLLOWS_SLASHED_SYMLINK
+AC_FUNC_CHOWN
 AC_CHECK_FUNCS([mkdir strcasecmp strchr strtoul utmpxname])  
 
 #AC_CHECK_LIB(pthread,pthread_create)

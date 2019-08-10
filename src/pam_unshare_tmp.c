@@ -36,9 +36,9 @@
 #include <limits.h>
 #include <utmpx.h>
 
-typedef enum bool_ {
-	false,true
-} bool;
+// man 5 proc:  32768 <= pid <= PID_MAX_LIMIT = 2^22 = 4194304,
+// (cat /proc/sys/kernel/pid_max to get its current value)
+#define PID_MAX_SIZE (strlen("4194304"))
 
 #define OBTAIN(item, value, default_value)  do {                \
 		(void) pam_get_item(pamh, item, &value);                   \
@@ -48,8 +48,7 @@ typedef enum bool_ {
 #ifdef _DEBUG_
 static inline void log_items(pam_handle_t *pamh, const char *function)
 {
-	const void *service=NULL, *user=NULL, *terminal=NULL,
-			*rhost=NULL, *ruser=NULL;
+	const void *service=NULL, *user=NULL, *terminal=NULL, *rhost=NULL, *ruser=NULL;
 	setlogmask(LOG_UPTO(LOG_DEBUG));
 	OBTAIN(PAM_SERVICE, service, "<unknown>");
 	OBTAIN(PAM_TTY, terminal, "<unknown>");
@@ -127,8 +126,8 @@ static inline bool filtered_exe(const char *program_name) {
 static int proc_filter(pam_handle_t *pamh,const char *pid) {
 	int error = EXIT_SUCCESS;
 #define PROC_EXE_PATH "/proc/%s/exe"
-	size_t proc_length = strlen(pid) + strlen(PROC_EXE_PATH) + 1;
-	char *exe = (char *)alloca(proc_length);
+	const size_t proc_length = PID_MAX_SIZE + strlen(PROC_EXE_PATH) + 1;
+	char exe[proc_length];
 	const size_t l = (size_t)sprintf(exe,PROC_EXE_PATH,pid);
 	ASSERT(l <= proc_length);
 	struct stat status;
@@ -157,7 +156,24 @@ static int proc_filter(pam_handle_t *pamh,const char *pid) {
 	return error;
 }
 
-static int move_to_uid_namespace(pam_handle_t *pamh,const uid_t uid) {
+static inline int move_to_uid_namespace(pam_handle_t *pamh,const char *ns_path,const int ns_type) {
+	int error = EXIT_SUCCESS;
+	int nd = open(ns_path,O_RDONLY);
+	if (likely(nd != -1)) {
+		// Join that namespace
+		if (unlikely(setns(nd,ns_type) != 0)) {
+			error = errno;
+			ERROR_MSG("setns %s error %d (%m)",ns_path,error);
+		}
+		close(nd);
+		nd = -1;
+	} else {
+		error = errno;
+		ERROR_MSG("open %s error %d (%m)",ns_path,error);
+	}
+	return error;
+}
+static int move_to_uid_namespaces(pam_handle_t *pamh,const uid_t uid) {
 	int error = ENOENT;
 	const char * const directory = "/proc";
 	DIR *dir = opendir(directory);
@@ -176,29 +192,30 @@ static int move_to_uid_namespace(pam_handle_t *pamh,const uid_t uid) {
 							print_cmdline(pamh,pid);
 							error = proc_filter(pamh,pid);
 							if (likely(EXIT_SUCCESS == error)) {
-#define PROC_MOUNT_NS_PATH "/proc/%s/ns/mnt"
-								size_t length = strlen(pid) + strlen(PROC_MOUNT_NS_PATH) + 1;
-								char *proc_ns = (char *)alloca(length);
-								const size_t l = (size_t)sprintf(proc_ns,PROC_MOUNT_NS_PATH,pid);
-								ASSERT(l <= length);
-								int nd = open(proc_ns,O_RDONLY);
-								if (likely(nd != -1)) {
-									// Join that namespace
-									if (likely(setns(nd,CLONE_NEWNS) == 0)) {
-										error = EXIT_SUCCESS;
+								const size_t length = PID_MAX_SIZE + strlen("/proc/%s/ns/mnt"); // same size for ipc
+								char ns_path[length];
+
+								// mount
+								size_t n = (size_t)sprintf(ns_path,"/proc/%s/ns/mnt",pid);
+								ASSERT(n <= length);
+								error = move_to_uid_namespace(pamh,ns_path,CLONE_NEWNS);
+								if (likely(EXIT_SUCCESS == error)) {
+									DEBUG_MSG("Move to user's private mnt namespace successfully done");
+									// ipc
+									n = (size_t)sprintf(ns_path,"/proc/%s/ns/ipc",pid);
+									ASSERT(n <= length);
+									error = move_to_uid_namespace(pamh,ns_path,CLONE_NEWIPC);
+									if (likely(EXIT_SUCCESS == error)) {
+										DEBUG_MSG("Move to user's private IPC namespace successfully done");
 										break;
-									} else {
-										error = errno;
-										ERROR_MSG("setns %s error %d (%m)",proc_ns,error);
+									} else { // else try to find another one
+										WARNING_MSG("Move to IPC namespace error %d(%m)",error);
 									}
-									close(nd);
-									nd = -1;
 								} else {
-									error = errno;
-									ERROR_MSG("open %s error %d (%m)",proc_ns,error);
+									WARNING_MSG("Move to mnt namespace error %d(%m)",error);
 								}
-							}
-						}
+							} // (likely(EXIT_SUCCESS == proc_filter))
+						} // (unlikely(uid == status.st_uid))
 					} else {
 						error = errno;
 						ERROR_MSG("fstatat /proc/%s error %d (%m)",pid,error);
@@ -217,7 +234,7 @@ static int move_to_uid_namespace(pam_handle_t *pamh,const uid_t uid) {
 	}
 
 	DEBUG_VAR(error,"%d");
-#undef PROC_MOUNT_NS_PATH
+#undef PROC_MOUNT_NS_MNT_PATH
 	return error;
 }
 
@@ -331,7 +348,7 @@ static int move_to_user_namespace(pam_handle_t *pamh,const char *username,const 
 			//DEBUG_VAR(pid,"current %u");
 			// try to find already mounted volume for this user
 			const uid_t uid = entry.pw_uid;
-			error = move_to_uid_namespace(pamh,uid);
+			error = move_to_uid_namespaces(pamh,uid);
 			if (unlikely(ENOENT == error)) {
 				INFO_MSG("Not running process found for this user: creating its running namespaces...");
 
@@ -348,10 +365,11 @@ static int move_to_user_namespace(pam_handle_t *pamh,const char *username,const 
 					error = getgrgid_r(entry.pw_gid,&grp,grp_buffer,grp_buffer_size,&grp_result);
 					if (likely(grp_result)) {
 						// get user's parameters
-						userParameters params = {pamh,username,grp.gr_name,DEFAULT_SIZE,DEFAULT_MOUNT_OPTIONS,DEFAULT_DIR_MODE};
+						userParameters params = {pamh,username,grp.gr_name,DEFAULT_SIZE,DEFAULT_MOUNT_OPTIONS,DEFAULT_DIR_MODE,false};
 						get_user_parameters(configfile,&params);
-
-						if (unshare(CLONE_NEWNS) == 0) { // New FS / mount namespace
+						const int unshare_flags = (params.unshare_ipc)?(CLONE_NEWIPC|CLONE_NEWNS):CLONE_NEWNS;
+						DEBUG_VAR(unshare_flags,"0x%X");
+						if (unshare(unshare_flags) == 0) { // New FS / mount namespace
 							// create a new private mount namespace
 							if (likely(mount("none", "/", NULL, MS_REC | MS_PRIVATE, NULL) == 0)) {
 								// set its /tmp directory
@@ -365,7 +383,7 @@ static int move_to_user_namespace(pam_handle_t *pamh,const char *username,const 
 							}
 						} else {
 							error = errno;
-							CRIT_MSG("unshare CLONE_NEWNS error %d (%m)",error);
+							CRIT_MSG("unshare 0x%X error %d (%m)",unshare_flags,error);
 						}
 					} else {
 						if (likely(EXIT_SUCCESS == error)) {
